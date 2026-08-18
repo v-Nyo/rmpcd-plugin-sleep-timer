@@ -1,0 +1,5 @@
+{
+    "author": "v-Nyo",
+    "name": "sleep-timer",
+    "entry_point": "sleep.lua"
+}
