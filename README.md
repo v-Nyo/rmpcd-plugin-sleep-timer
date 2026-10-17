@@ -21,4 +21,16 @@ rmpcd.install("plugins.sleep"):setup({
 ``` ron
 "ts":         ExternalCommand(command: ["rmpc", "sendmessage", "rmpcd.sleep", "{}"]),
 "tk":         ExternalCommand(command: ["rmpc", "sendmessage", "rmpcd.sleep", "cancel"]),
+"tr":         ExternalCommand(command: ["rmpc", "sendmessage", "rmpcd.sleep", "status"]),
 ```
+
+## Example input
+
+| Command | Description |
+|---------|-------------|
+| `10`    | Timer for 10 seconds, then stops when the current song ends |
+| `10s`   | Same as above (10 seconds) |
+| `10m`   | Same as above, but with 10 minutes |
+| `10h`   | 10 hours, then stops after the current song |
+| `i10s`  | Timer for 10 seconds, then stops immediately (does not wait for song to finish) |
+| `i10d`  | Same as above, but with 10 days|
