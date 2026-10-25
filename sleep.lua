@@ -32,17 +32,18 @@ end
 local function parse_duration(input)
   if not input then return nil, false end
 
-  local immediate = input:sub(1, 1):lower() == "i"
+  local immediate = input:lower():sub(1, 1) == "i"
   if immediate then input = input:sub(2) end
 
   input = input:match("^%s*(.-)%s*$") or ""
-  if input == "" then return immediate and 0 or nil, immediate end
+  if input == "" then return nil, immediate end
 
   local num, suffix = input:match("^([%d%.]+)([smhd]?)$")
-  if not num then return nil, immediate end
+  local n = num and tonumber(num)
+  if not n then return nil, immediate end
 
   local mult = ({ s = 1, m = 60, h = 3600, d = 86400 })[suffix] or 1
-  return tonumber(num) * mult * 1000, immediate
+  return n * mult * 1000, immediate
 end
 
 -- Format ms as "2d 3h", "1h 5m", "10m 30s", "45s"
@@ -61,9 +62,20 @@ local function format_duration(ms)
   return table.concat(parts, " ")
 end
 
-local function arm(self)
+local function disarm(self)
   if self.timeout_handle then self.timeout_handle:cancel() end
   self.timeout_handle = nil
+end
+
+local function stop_timer(self)
+  disarm(self)
+  self.stop_on_song_change = false
+  self.timer_end_ms = nil
+  self.timer_immediate = false
+end
+
+local function arm(self)
+  disarm(self)
   if self.timer_end_ms == nil then return end
 
   local remaining = self.timer_end_ms - os.time() * 1000
@@ -77,21 +89,18 @@ local function arm(self)
       -- sleep again for the *true* remaining, capped at MAX_SLEEP_MS.
       arm(self)
     else
-      self.timeout_handle = nil
-      self.timer_end_ms = nil
-      self.timer_immediate = false
-      stop_action()
-      status("Sleep timer fired: playback stopped")
+      local was_immediate = self.timer_immediate
+      stop_timer(self)
+      if was_immediate then
+        stop_action()
+        status("Playback stopped")
+      else
+        -- Deadline reached: let the current song finish, then stop.
+        self.stop_on_song_change = true
+        status("Will stop after song finishes")
+      end
     end
   end)
-end
-
-local function stop_timer(self)
-  if self.timeout_handle then self.timeout_handle:cancel() end
-  self.timeout_handle = nil
-  self.stop_on_song_change = false
-  self.timer_end_ms = nil
-  self.timer_immediate = false
 end
 
 M.message = function(self, _channel, message)
@@ -138,12 +147,12 @@ end
 
 -- Pause freezes the timer; resume re-arms from the stored remaining time.
 M.state_change = function(self, _old, new)
-  if (new == "pause" or new == "stop") and self.timer_end_ms then
+  if new == "stop" then
+    stop_timer(self)
+  elseif new == "pause" and self.timer_end_ms then
     self.paused_remaining_ms = math.max(0, self.timer_end_ms - os.time() * 1000)
-    -- Keep paused_remaining_ms; clear everything else without armed state
+    disarm(self)
     self.timer_end_ms = nil
-    if self.timeout_handle then self.timeout_handle:cancel() end
-    self.timeout_handle = nil
   elseif new == "play" and self.paused_remaining_ms then
     self.timer_end_ms = os.time() * 1000 + self.paused_remaining_ms
     self.paused_remaining_ms = nil
